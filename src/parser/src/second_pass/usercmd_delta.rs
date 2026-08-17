@@ -4,8 +4,16 @@
 //! Singular fields retain protobuf wire encoding except for wire type 7,
 //! which resets a field to its declared default. The repeated input-history
 //! and subtick fields use the replacement-list encoding observed in current
-//! CS2 demos. Unknown or malformed operations fail the whole delta so callers
-//! can keep the previous per-player baseline unchanged.
+//! CS2 demos. Unknown or malformed operations in `base` fail the whole delta
+//! so callers can keep the previous per-player baseline unchanged.
+//!
+//! The two repeated sub-lists are handled at their own granularity: they are
+//! self-contained and carry nothing the button, mouse or view-angle props read.
+//! Current CS2 demos emit list operations this decoder does not model yet (a
+//! non-sequential `index << 3 | 7` key), and failing the enclosing command on
+//! them discards the whole user command — measured at 23% of all commands on a
+//! July-2026 Valve demo, which is what makes `buttons` collapse on those demos.
+//! An unparsed sub-list therefore keeps its baseline value instead.
 
 use csgoproto::CBaseUserCmdExecutionNotes;
 use csgoproto::CInButtonStatePb;
@@ -325,7 +333,9 @@ pub(super) fn apply_delta(baseline: &CsgoUserCmdPb, delta_data: &[u8]) -> Option
     let mut next = baseline.clone();
 
     if !delta.input_history_delta.is_empty() {
-        next.input_history = decode_repeated(&delta.input_history_delta, MessageSchema::InputHistory)?;
+        if let Some(history) = decode_repeated(&delta.input_history_delta, MessageSchema::InputHistory) {
+            next.input_history = history;
+        }
     }
     replace_if_some(&mut next.attack1_start_history_index, delta.attack1_start_history_index);
     replace_if_some(&mut next.attack2_start_history_index, delta.attack2_start_history_index);
@@ -361,7 +371,9 @@ pub(super) fn apply_delta(baseline: &CsgoUserCmdPb, delta_data: &[u8]) -> Option
             base.execution_notes = Some(CBaseUserCmdExecutionNotes::decode(notes).ok()?);
         }
         if !delta_base.subtick_moves_delta.is_empty() {
-            base.subtick_moves = decode_repeated(&delta_base.subtick_moves_delta, MessageSchema::SubtickMove)?;
+            if let Some(moves) = decode_repeated(&delta_base.subtick_moves_delta, MessageSchema::SubtickMove) {
+                base.subtick_moves = moves;
+            }
         }
     }
 
@@ -402,9 +414,36 @@ mod tests {
     }
 
     #[test]
-    fn rejects_nonsequential_repeated_entries_without_mutating_baseline() {
+    fn keeps_baseline_input_history_when_the_list_encoding_is_not_understood() {
+        // base { buttons_pb { buttonstate1: 0x410 } } plus an input-history
+        // list whose first key is non-sequential, i.e. an operation this
+        // decoder does not model. The command must still apply.
+        let delta = [0x0a, 0x05, 0x1a, 0x03, 0x08, 0x90, 0x08, 0x12, 0x02, 0x0a, 0x00];
+        let baseline = CsgoUserCmdPb {
+            base: Some(csgoproto::CBaseUserCmdPb {
+                buttons_pb: Some(CInButtonStatePb {
+                    buttonstate1: Some(1),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            input_history: vec![Default::default()],
+            ..Default::default()
+        };
+
+        let command = apply_delta(&baseline, &delta).expect("base must still apply");
+        assert_eq!(command.base.unwrap().buttons_pb.unwrap().buttonstate1, Some(0x410));
+        // The sub-list is preserved, not cleared.
+        assert_eq!(command.input_history, baseline.input_history);
+        assert_eq!(baseline.input_history.len(), 1);
+    }
+
+    #[test]
+    fn rejects_malformed_base_without_mutating_baseline() {
+        // A truncated varint inside `base` is not recoverable — the whole
+        // delta is rejected so the caller keeps the previous baseline.
         let baseline = CsgoUserCmdPb::default();
-        let delta = [0x12, 0x02, 0x0a, 0x00];
+        let delta = [0x0a, 0x02, 0xff, 0xff];
         assert!(apply_delta(&baseline, &delta).is_none());
         assert_eq!(baseline, CsgoUserCmdPb::default());
     }

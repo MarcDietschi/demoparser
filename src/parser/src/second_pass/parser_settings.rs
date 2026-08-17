@@ -6,6 +6,7 @@ use crate::first_pass::sendtables::Serializer;
 use crate::first_pass::stringtables::StringTable;
 use crate::first_pass::stringtables::UserInfo;
 use crate::maps::BUTTONMAP;
+use crate::maps::BUTTONS_PROP;
 use crate::second_pass::collect_data::ProjectileRecord;
 use crate::second_pass::decoder::QfMapper;
 use crate::second_pass::entities::Entity;
@@ -178,7 +179,10 @@ impl<'a> SecondPassParser<'a> {
 
         Ok(SecondPassParser {
             uniq_prop_names: AHashSet::default(),
-            parse_usercmd: contains_usercmd_prop(&first_pass_output.settings.wanted_player_props),
+            parse_usercmd: contains_usercmd_prop(
+                &first_pass_output.settings.wanted_player_props,
+                first_pass_output.prop_controller.special_ids.buttons.is_none(),
+            ),
             usercmd_baselines: AHashMap::default(),
             last_tick: 0,
             start_end_offset: start_end_offset,
@@ -358,6 +362,12 @@ pub fn create_huffman_lookup_table() -> Vec<(u8, u8)> {
     return huf2;
 }
 
-fn contains_usercmd_prop(names: &[String]) -> bool {
-    names.iter().any(|name| name.contains("usercmd") || BUTTONMAP.get(name.as_str()).is_some())
+/// Usercmd parsing is expensive, so only turn it on when something actually
+/// needs it. The button props are served from the pawn button mask whenever the
+/// demo networks it; only when it is absent do they need the usercmd fallback.
+fn contains_usercmd_prop(names: &[String], button_mask_absent: bool) -> bool {
+    names.iter().any(|name| {
+        name.contains("usercmd")
+            || (button_mask_absent && (BUTTONMAP.get(name.as_str()).is_some() || name == BUTTONS_PROP))
+    })
 }

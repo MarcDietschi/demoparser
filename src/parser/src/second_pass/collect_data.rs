@@ -485,6 +485,13 @@ impl<'a> SecondPassParser<'a> {
             IS_AIRBORNE_ID => self.find_is_airborne(player),
             AGENT_SKIN_ID => self.find_agent_skin(player),
             USERCMD_INPUT_HISTORY_BASEID => self.get_prop_from_ent(&USERCMD_INPUT_HISTORY_BASEID, entity_id),
+            // The pawn button mask is not networked on demos that carry input
+            // in `CMsgServerUserCmd.delta_data`. Serve `buttons` through the
+            // same fallback the named button props already use.
+            BUTTON_MASK_ID => self
+                .get_button_mask(entity_id)
+                .map(Variant::U64)
+                .ok_or(PropCollectionError::ButtonsSpecialIDNone),
             GLOVE_PAINT_ID => self.find_glove_skin_id(entity_id),
             GLOVE_SKIN => self.find_glove_skin(entity_id),
             GLOVE_PAINT_SEED => self.find_glove_paint_seed(entity_id),

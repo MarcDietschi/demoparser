@@ -167,6 +167,9 @@ pub static BASETYPE_DECODERS2: phf::Map<&'static str, Decoder> = phf_map! {
     "gamerulesmode_fix" => GameModeRulesDecoder,
 };
 
+/// User-facing name of the raw button mask prop.
+pub const BUTTONS_PROP: &str = "buttons";
+
 pub static BUTTONMAP: phf::Map<&'static str, u64> = phf_map! {
     "LEFT" => 1 << 9,
     "FORWARD" => 1 << 3,
@@ -225,6 +228,7 @@ pub static CUSTOM_PLAYER_PROP_IDS: phf::Map<&'static str, u32> = phf_map! {
     "usercmd_weapon_select" => USERCMD_WEAPON_SELECT,
     "usercmd_input_history" => USERCMD_INPUT_HISTORY_BASEID,
     "usercmd_subtick_moves" => USERCMD_SUBTICK_MOVES_BASEID,
+    "buttons" => BUTTON_MASK_ID,
 
 
 
@@ -260,6 +264,7 @@ pub static TYPEHM: phf::Map<&'static str, PropType> = phf_map! {
     "usercmd_consumed_server_angle_changes" => PropType::Player,
     "usercmd_input_history" => PropType::Custom,
     "usercmd_subtick_moves" => PropType::Custom,
+    "buttons" => PropType::Custom,
 
 
     "CCSPlayerPawn.CCSPlayer_MovementServices.m_nButtonDownMaskPrev" => PropType::Player,
@@ -902,7 +907,9 @@ pub static FRIENDLY_NAMES_MAPPING: phf::Map<&'static str, &'static str> = phf_ma
     "rank_if_tie" => "CCSPlayerController.m_iCompetitiveRankingPredicted_Tie",
     "mvps" => "CCSPlayerController.m_iMVPs",
     "active_weapon_original_owner" => "active_weapon_original_owner",
-    "buttons" => "CCSPlayerPawn.CCSPlayer_MovementServices.m_nButtonDownMaskPrev",
+    // Resolves to itself: the raw button mask is served by a custom prop that
+    // falls back to the usercmd button state when the pawn prop is absent.
+    "buttons" => "buttons",
     "team_surrendered" => "CCSTeam.m_bSurrendered",
     "team_rounds_total" => "CCSTeam.m_iScore",
     "team_name" => "CCSTeam.m_szTeamname",
