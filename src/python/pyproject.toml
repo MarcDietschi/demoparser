@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "demoparser2"
-dynamic = ["version"]
+version = "0.42.1.post1"
 requires-python = ">=3.8"
 dependencies = ["pandas>=1.5.0", "numpy", "polars", "pyarrow", "tqdm"]
 classifiers = [

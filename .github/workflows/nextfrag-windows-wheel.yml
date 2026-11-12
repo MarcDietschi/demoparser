@@ -1,0 +1,72 @@
+name: nextfrag Windows wheel
+
+# Builds demoparser2 0.42.1 + upstream PR #375 (fixed8 encoder, CS2 build 14197) as 0.42.1.post1
+# for Windows x64. Same inputs as the upstream 0.42.1 release build: default features,
+# setup-protoc v3 (protoc 23.x) and GameTracking-CS2 pinned to 04d3e4a6. Nothing is published;
+# the wheels are uploaded as a workflow artifact.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "nextfrag/fixed8-0.42.1.post1"
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: |
+            3.11
+            3.13
+          architecture: x64
+
+      - name: Pin GameTracking-CS2 protos
+        shell: bash
+        run: |
+          mkdir -p src/csgoproto/GameTracking-CS2
+          cd src/csgoproto/GameTracking-CS2
+          git init --quiet
+          git remote add origin https://github.com/SteamDatabase/GameTracking-CS2.git
+          git fetch --quiet --depth 1 origin 04d3e4a67ac60168d0e79594c69a2116bb3b7278
+          git checkout --quiet FETCH_HEAD
+          git rev-parse HEAD
+
+      - name: Unit test of the patch
+        shell: bash
+        working-directory: src/parser
+        run: cargo test --release fixed8
+
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          target: x64
+          args: --release -i 3.11 -i 3.13 --out dist -m src/python/Cargo.toml
+
+      - name: Provenance
+        shell: bash
+        run: |
+          git rev-parse HEAD | tee dist/commit.txt
+          protoc --version | tee dist/protoc_version.txt
+          rustc --version | tee dist/rustc_version.txt
+          (cd dist && sha256sum *.whl | tee wheel_sha256.txt)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: demoparser2-0.42.1.post1-windows
+          path: dist/
+          if-no-files-found: error
